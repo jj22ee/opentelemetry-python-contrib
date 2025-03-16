@@ -21,13 +21,16 @@ import os
 import threading
 import time
 from logging import DEBUG
-from pytest import mark
 from unittest import TestCase
 from unittest.mock import patch
 
-from opentelemetry.samplers.aws._mock_clock import MockClock
+from pytest import mark
 
-from opentelemetry.samplers.aws.aws_xray_remote_sampler import AwsXRayRemoteSampler, _AwsXRayRemoteSampler
+from opentelemetry.samplers.aws._mock_clock import MockClock
+from opentelemetry.samplers.aws.aws_xray_remote_sampler import (
+    AwsXRayRemoteSampler,
+    _AwsXRayRemoteSampler,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Tracer, TracerProvider
 from opentelemetry.sdk.trace.sampling import Decision
@@ -36,10 +39,17 @@ TEST_DIR = os.path.dirname(os.path.realpath(__file__))
 DATA_DIR = os.path.join(TEST_DIR, "data")
 
 
-def create_spans(sampled_array, thread_id, span_attributes, remote_sampler, number_of_spans):
+def create_spans(
+    sampled_array, thread_id, span_attributes, remote_sampler, number_of_spans
+):
     sampled = 0
     for _ in range(0, number_of_spans):
-        if remote_sampler.should_sample(None, 0, "name", attributes=span_attributes).decision != Decision.DROP:
+        if (
+            remote_sampler.should_sample(
+                None, 0, "name", attributes=span_attributes
+            ).decision
+            != Decision.DROP
+        ):
             sampled += 1
     sampled_array[thread_id] = sampled
 
@@ -54,12 +64,18 @@ def mocked_requests_get(*args, **kwargs):
             return self.json_data
 
     if kwargs["url"] == "http://127.0.0.1:2000/GetSamplingRules":
-        with open(f"{DATA_DIR}/test-remote-sampler_sampling-rules-response-sample.json", encoding="UTF-8") as file:
+        with open(
+            f"{DATA_DIR}/test-remote-sampler_sampling-rules-response-sample.json",
+            encoding="UTF-8",
+        ) as file:
             sample_response = json.load(file)
             file.close()
         return MockResponse(sample_response, 200)
     if kwargs["url"] == "http://127.0.0.1:2000/SamplingTargets":
-        with open(f"{DATA_DIR}/test-remote-sampler_sampling-targets-response-sample.json", encoding="UTF-8") as file:
+        with open(
+            f"{DATA_DIR}/test-remote-sampler_sampling-targets-response-sample.json",
+            encoding="UTF-8",
+        ) as file:
             sample_response = json.load(file)
             file.close()
         return MockResponse(sample_response, 200)
@@ -79,90 +95,178 @@ class TestAwsXRayRemoteSampler(TestCase):
     def test_create_remote_sampler_with_empty_resource(self):
         self.rs = AwsXRayRemoteSampler(resource=Resource.get_empty())
         self.assertIsNotNone(self.rs._root._root._rules_timer)
-        self.assertEqual(self.rs._root._root._AwsXRayRemoteSampler__polling_interval, 300)
-        self.assertIsNotNone(self.rs._root._root._AwsXRayRemoteSampler__xray_client)
-        self.assertIsNotNone(self.rs._root._root._AwsXRayRemoteSampler__resource)
-        self.assertTrue(len(self.rs._root._root._AwsXRayRemoteSampler__client_id), 24)
+        self.assertEqual(
+            self.rs._root._root._AwsXRayRemoteSampler__polling_interval, 300
+        )
+        self.assertIsNotNone(
+            self.rs._root._root._AwsXRayRemoteSampler__xray_client
+        )
+        self.assertIsNotNone(
+            self.rs._root._root._AwsXRayRemoteSampler__resource
+        )
+        self.assertTrue(
+            len(self.rs._root._root._AwsXRayRemoteSampler__client_id), 24
+        )
 
     def test_create_remote_sampler_with_populated_resource(self):
         self.rs = AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "test-service-name", "cloud.platform": "test-cloud-platform"})
+            resource=Resource.create(
+                {
+                    "service.name": "test-service-name",
+                    "cloud.platform": "test-cloud-platform",
+                }
+            )
         )
         self.assertIsNotNone(self.rs._root._root._rules_timer)
-        self.assertEqual(self.rs._root._root._AwsXRayRemoteSampler__polling_interval, 300)
-        self.assertIsNotNone(self.rs._root._root._AwsXRayRemoteSampler__xray_client)
-        self.assertIsNotNone(self.rs._root._root._AwsXRayRemoteSampler__resource)
         self.assertEqual(
-            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes["service.name"], "test-service-name"
+            self.rs._root._root._AwsXRayRemoteSampler__polling_interval, 300
+        )
+        self.assertIsNotNone(
+            self.rs._root._root._AwsXRayRemoteSampler__xray_client
+        )
+        self.assertIsNotNone(
+            self.rs._root._root._AwsXRayRemoteSampler__resource
         )
         self.assertEqual(
-            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes["cloud.platform"], "test-cloud-platform"
+            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes[
+                "service.name"
+            ],
+            "test-service-name",
+        )
+        self.assertEqual(
+            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes[
+                "cloud.platform"
+            ],
+            "test-cloud-platform",
         )
 
     def test_create_remote_sampler_with_all_fields_populated(self):
         self.rs = AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "test-service-name", "cloud.platform": "test-cloud-platform"}),
+            resource=Resource.create(
+                {
+                    "service.name": "test-service-name",
+                    "cloud.platform": "test-cloud-platform",
+                }
+            ),
             endpoint="http://abc.com",
             polling_interval=120,
             log_level=DEBUG,
         )
         self.assertIsNotNone(self.rs._root._root._rules_timer)
-        self.assertEqual(self.rs._root._root._AwsXRayRemoteSampler__polling_interval, 120)
-        self.assertIsNotNone(self.rs._root._root._AwsXRayRemoteSampler__xray_client)
-        self.assertIsNotNone(self.rs._root._root._AwsXRayRemoteSampler__resource)
+        self.assertEqual(
+            self.rs._root._root._AwsXRayRemoteSampler__polling_interval, 120
+        )
+        self.assertIsNotNone(
+            self.rs._root._root._AwsXRayRemoteSampler__xray_client
+        )
+        self.assertIsNotNone(
+            self.rs._root._root._AwsXRayRemoteSampler__resource
+        )
         self.assertEqual(
             self.rs._root._root._AwsXRayRemoteSampler__xray_client._AwsXRaySamplingClient__get_sampling_rules_endpoint,
             "http://abc.com/GetSamplingRules",
         )
         self.assertEqual(
-            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes["service.name"], "test-service-name"
+            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes[
+                "service.name"
+            ],
+            "test-service-name",
         )
         self.assertEqual(
-            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes["cloud.platform"], "test-cloud-platform"
+            self.rs._root._root._AwsXRayRemoteSampler__resource.attributes[
+                "cloud.platform"
+            ],
+            "test-cloud-platform",
         )
 
     @patch("requests.Session.post", side_effect=mocked_requests_get)
-    @patch("opentelemetry.samplers.aws.aws_xray_remote_sampler.DEFAULT_TARGET_POLLING_INTERVAL_SECONDS", 2)
-    def test_update_sampling_rules_and_targets_with_pollers_and_should_sample(self, mock_post=None):
+    @patch(
+        "opentelemetry.samplers.aws.aws_xray_remote_sampler.DEFAULT_TARGET_POLLING_INTERVAL_SECONDS",
+        2,
+    )
+    def test_update_sampling_rules_and_targets_with_pollers_and_should_sample(
+        self, mock_post=None
+    ):
         self.rs = AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "test-service-name", "cloud.platform": "test-cloud-platform"})
+            resource=Resource.create(
+                {
+                    "service.name": "test-service-name",
+                    "cloud.platform": "test-cloud-platform",
+                }
+            )
         )
-        self.assertEqual(self.rs._root._root._AwsXRayRemoteSampler__target_polling_interval, 2)
+        self.assertEqual(
+            self.rs._root._root._AwsXRayRemoteSampler__target_polling_interval,
+            2,
+        )
 
         time.sleep(1.0)
         self.assertEqual(
-            self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[0].sampling_rule.RuleName,
+            self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[
+                0
+            ].sampling_rule.RuleName,
             "test",
         )
-        self.assertEqual(self.rs.should_sample(None, 0, "name", attributes={"abc": "1234"}).decision, Decision.DROP)
+        self.assertEqual(
+            self.rs.should_sample(
+                None, 0, "name", attributes={"abc": "1234"}
+            ).decision,
+            Decision.DROP,
+        )
 
         # wait 2 more seconds since targets polling was patched to 2 seconds (rather than 10s)
         time.sleep(2.0)
-        self.assertEqual(self.rs._root._root._AwsXRayRemoteSampler__target_polling_interval, 1000)
         self.assertEqual(
-            self.rs.should_sample(None, 0, "name", attributes={"abc": "1234"}).decision,
+            self.rs._root._root._AwsXRayRemoteSampler__target_polling_interval,
+            1000,
+        )
+        self.assertEqual(
+            self.rs.should_sample(
+                None, 0, "name", attributes={"abc": "1234"}
+            ).decision,
             Decision.RECORD_AND_SAMPLE,
         )
         self.assertEqual(
-            self.rs.should_sample(None, 0, "name", attributes={"abc": "1234"}).decision,
+            self.rs.should_sample(
+                None, 0, "name", attributes={"abc": "1234"}
+            ).decision,
             Decision.RECORD_AND_SAMPLE,
         )
         self.assertEqual(
-            self.rs.should_sample(None, 0, "name", attributes={"abc": "1234"}).decision,
+            self.rs.should_sample(
+                None, 0, "name", attributes={"abc": "1234"}
+            ).decision,
             Decision.RECORD_AND_SAMPLE,
         )
 
-    @mark.skip(reason="Uses sleep in test, which could be flaky. Remove this skip for validation locally.")
+    @mark.skip(
+        reason="Uses sleep in test, which could be flaky. Remove this skip for validation locally."
+    )
     @patch("requests.Session.post", side_effect=mocked_requests_get)
-    @patch("opentelemetry.samplers.aws.aws_xray_remote_sampler.DEFAULT_TARGET_POLLING_INTERVAL_SECONDS", 3)
-    def test_multithreading_with_large_reservoir_with_otel_sdk(self, mock_post=None):
+    @patch(
+        "opentelemetry.samplers.aws.aws_xray_remote_sampler.DEFAULT_TARGET_POLLING_INTERVAL_SECONDS",
+        3,
+    )
+    def test_multithreading_with_large_reservoir_with_otel_sdk(
+        self, mock_post=None
+    ):
         self.rs = AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "test-service-name", "cloud.platform": "test-cloud-platform"})
+            resource=Resource.create(
+                {
+                    "service.name": "test-service-name",
+                    "cloud.platform": "test-cloud-platform",
+                }
+            )
         )
         attributes = {"abc": "1234"}
 
         time.sleep(2.0)
-        self.assertEqual(self.rs.should_sample(None, 0, "name", attributes=attributes).decision, Decision.DROP)
+        self.assertEqual(
+            self.rs.should_sample(
+                None, 0, "name", attributes=attributes
+            ).decision,
+            Decision.DROP,
+        )
 
         # wait 3 more seconds since targets polling was patched to 2 seconds (rather than 10s)
         time.sleep(3.0)
@@ -179,7 +283,13 @@ class TestAwsXRayRemoteSampler(TestCase):
                     target=create_spans,
                     name="thread_" + str(idx),
                     daemon=True,
-                    args=(sampled_array, idx, attributes, self.rs, number_of_spans),
+                    args=(
+                        sampled_array,
+                        idx,
+                        attributes,
+                        self.rs,
+                        number_of_spans,
+                    ),
                 )
             )
             threads[idx].start()
@@ -189,7 +299,9 @@ class TestAwsXRayRemoteSampler(TestCase):
             threads[idx].join()
             sum_sampled += sampled_array[idx]
 
-        test_rule_applier = self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[0]
+        test_rule_applier = self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[
+            0
+        ]
         self.assertEqual(
             test_rule_applier._SamplingRuleApplier__reservoir_sampler._RateLimitingSampler__reservoir._quota,
             100000,
@@ -197,13 +309,27 @@ class TestAwsXRayRemoteSampler(TestCase):
         self.assertEqual(sum_sampled, 100000)
 
     # pylint: disable=no-member
-    @mark.skip(reason="Uses sleep in test, which could be flaky. Remove this skip for validation locally.")
+    @mark.skip(
+        reason="Uses sleep in test, which could be flaky. Remove this skip for validation locally."
+    )
     @patch("requests.Session.post", side_effect=mocked_requests_get)
-    @patch("opentelemetry.samplers.aws.aws_xray_remote_sampler.DEFAULT_TARGET_POLLING_INTERVAL_SECONDS", 2)
-    @patch("opentelemetry.samplers.aws.aws_xray_remote_sampler._Clock", MockClock)
-    def test_multithreading_with_some_reservoir_with_otel_sdk(self, mock_post=None):
+    @patch(
+        "opentelemetry.samplers.aws.aws_xray_remote_sampler.DEFAULT_TARGET_POLLING_INTERVAL_SECONDS",
+        2,
+    )
+    @patch(
+        "opentelemetry.samplers.aws.aws_xray_remote_sampler._Clock", MockClock
+    )
+    def test_multithreading_with_some_reservoir_with_otel_sdk(
+        self, mock_post=None
+    ):
         self.rs = AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "test-service-name", "cloud.platform": "test-cloud-platform"})
+            resource=Resource.create(
+                {
+                    "service.name": "test-service-name",
+                    "cloud.platform": "test-cloud-platform",
+                }
+            )
         )
         attributes = {"abc": "non-matching attribute value, use default rule"}
 
@@ -217,7 +343,10 @@ class TestAwsXRayRemoteSampler(TestCase):
         mock_clock.add_time(1.0)
         self.assertEqual(mock_clock.now(), self.rs._root._root._clock.now())
         self.assertEqual(
-            self.rs.should_sample(None, 0, "name", attributes=attributes).decision, Decision.RECORD_AND_SAMPLE
+            self.rs.should_sample(
+                None, 0, "name", attributes=attributes
+            ).decision,
+            Decision.RECORD_AND_SAMPLE,
         )
 
         # wait 2 more seconds since targets polling was patched to 2 seconds (rather than 10s)
@@ -237,7 +366,13 @@ class TestAwsXRayRemoteSampler(TestCase):
                     target=create_spans,
                     name="thread_" + str(idx),
                     daemon=True,
-                    args=(sampled_array, idx, attributes, self.rs, number_of_spans),
+                    args=(
+                        sampled_array,
+                        idx,
+                        attributes,
+                        self.rs,
+                        number_of_spans,
+                    ),
                 )
             )
             threads[idx].start()
@@ -247,7 +382,9 @@ class TestAwsXRayRemoteSampler(TestCase):
             threads[idx].join()
             sum_sampled += sampled_array[idx]
 
-        default_rule_applier = self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[1]
+        default_rule_applier = self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[
+            1
+        ]
         self.assertEqual(
             default_rule_applier._SamplingRuleApplier__reservoir_sampler._RateLimitingSampler__reservoir._quota,
             100,
@@ -255,7 +392,9 @@ class TestAwsXRayRemoteSampler(TestCase):
         self.assertEqual(sum_sampled, 100)
 
     def test_get_description(self) -> str:
-        self.rs: AwsXRayRemoteSampler = AwsXRayRemoteSampler(resource=Resource.create({"service.name": "dummy_name"}))
+        self.rs: AwsXRayRemoteSampler = AwsXRayRemoteSampler(
+            resource=Resource.create({"service.name": "dummy_name"})
+        )
         self.assertEqual(
             self.rs.get_description(),
             "AwsXRayRemoteSampler{root:ParentBased{root:_AwsXRayRemoteSampler{remote sampling with AWS X-Ray},remoteParentSampled:AlwaysOnSampler,remoteParentNotSampled:AlwaysOffSampler,localParentSampled:AlwaysOnSampler,localParentNotSampled:AlwaysOffSampler}}",  # noqa: E501
@@ -266,7 +405,9 @@ class TestAwsXRayRemoteSampler(TestCase):
         self, mock_post=None
     ):
         self.rs: AwsXRayRemoteSampler = AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "use-default-sample-all-rule"})
+            resource=Resource.create(
+                {"service.name": "use-default-sample-all-rule"}
+            )
         )
         time.sleep(1.0)
 
@@ -280,7 +421,9 @@ class TestAwsXRayRemoteSampler(TestCase):
                 pass
             with tracer.start_as_current_span("child2") as _:
                 pass
-        default_rule_applier = self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[1]
+        default_rule_applier = self.rs._root._root._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[
+            1
+        ]
         self.assertEqual(
             default_rule_applier._SamplingRuleApplier__statistics.RequestCount,
             1,
@@ -294,8 +437,12 @@ class TestAwsXRayRemoteSampler(TestCase):
     def test_non_parent_based_xray_sampler_updates_statistics_thrice_for_one_parent_span_with_two_children(
         self, mock_post=None
     ):
-        non_parent_based_xray_sampler: _AwsXRayRemoteSampler = _AwsXRayRemoteSampler(
-            resource=Resource.create({"service.name": "use-default-sample-all-rule"})
+        non_parent_based_xray_sampler: _AwsXRayRemoteSampler = (
+            _AwsXRayRemoteSampler(
+                resource=Resource.create(
+                    {"service.name": "use-default-sample-all-rule"}
+                )
+            )
         )
         time.sleep(1.0)
 
@@ -309,9 +456,9 @@ class TestAwsXRayRemoteSampler(TestCase):
                 pass
             with tracer.start_as_current_span("child2") as _:
                 pass
-        default_rule_applier = (
-            non_parent_based_xray_sampler._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[1]
-        )
+        default_rule_applier = non_parent_based_xray_sampler._AwsXRayRemoteSampler__rule_cache._RuleCache__rule_appliers[
+            1
+        ]
         self.assertEqual(
             default_rule_applier._SamplingRuleApplier__statistics.RequestCount,
             3,

@@ -18,10 +18,17 @@
 
 from typing import Optional, Sequence
 
-from opentelemetry.samplers.aws._clock import _Clock
-from opentelemetry.samplers.aws._rate_limiting_sampler import _RateLimitingSampler
 from opentelemetry.context import Context
-from opentelemetry.sdk.trace.sampling import Decision, Sampler, SamplingResult, TraceIdRatioBased
+from opentelemetry.samplers.aws._clock import _Clock
+from opentelemetry.samplers.aws._rate_limiting_sampler import (
+    _RateLimitingSampler,
+)
+from opentelemetry.sdk.trace.sampling import (
+    Decision,
+    Sampler,
+    SamplingResult,
+    TraceIdRatioBased,
+)
 from opentelemetry.trace import Link, SpanKind
 from opentelemetry.trace.span import TraceState
 from opentelemetry.util.types import Attributes
@@ -44,17 +51,27 @@ class _FallbackSampler(Sampler):
         trace_state: Optional["TraceState"] = None,
     ) -> "SamplingResult":
         sampling_result = self.__rate_limiting_sampler.should_sample(
-            parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+            parent_context,
+            trace_id,
+            name,
+            kind=kind,
+            attributes=attributes,
+            links=links,
+            trace_state=trace_state,
         )
         if sampling_result.decision is not Decision.DROP:
             return sampling_result
         return self.__fixed_rate_sampler.should_sample(
-            parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+            parent_context,
+            trace_id,
+            name,
+            kind=kind,
+            attributes=attributes,
+            links=links,
+            trace_state=trace_state,
         )
 
     # pylint: disable=no-self-use
     def get_description(self) -> str:
-        description = (
-            "FallbackSampler{fallback sampling with sampling config of 1 req/sec and 5% of additional requests}"
-        )
+        description = "FallbackSampler{fallback sampling with sampling config of 1 req/sec and 5% of additional requests}"
         return description

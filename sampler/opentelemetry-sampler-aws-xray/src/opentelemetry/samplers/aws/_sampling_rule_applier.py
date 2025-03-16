@@ -20,16 +20,31 @@ from threading import Lock
 from typing import Optional, Sequence
 from urllib.parse import urlparse
 
-from opentelemetry.samplers.aws._clock import _Clock
-from opentelemetry.samplers.aws._matcher import _Matcher, cloud_platform_mapping
-from opentelemetry.samplers.aws._rate_limiting_sampler import _RateLimitingSampler
-from opentelemetry.samplers.aws._sampling_rule import _SamplingRule
-from opentelemetry.samplers.aws._sampling_statistics_document import _SamplingStatisticsDocument
-from opentelemetry.samplers.aws._sampling_target import _SamplingTarget
 from opentelemetry.context import Context
+from opentelemetry.samplers.aws._clock import _Clock
+from opentelemetry.samplers.aws._matcher import (
+    _Matcher,
+    cloud_platform_mapping,
+)
+from opentelemetry.samplers.aws._rate_limiting_sampler import (
+    _RateLimitingSampler,
+)
+from opentelemetry.samplers.aws._sampling_rule import _SamplingRule
+from opentelemetry.samplers.aws._sampling_statistics_document import (
+    _SamplingStatisticsDocument,
+)
+from opentelemetry.samplers.aws._sampling_target import _SamplingTarget
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace.sampling import Decision, Sampler, SamplingResult, TraceIdRatioBased
-from opentelemetry.semconv.resource import CloudPlatformValues, ResourceAttributes
+from opentelemetry.sdk.trace.sampling import (
+    Decision,
+    Sampler,
+    SamplingResult,
+    TraceIdRatioBased,
+)
+from opentelemetry.semconv.resource import (
+    CloudPlatformValues,
+    ResourceAttributes,
+)
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace import Link, SpanKind
 from opentelemetry.trace.span import TraceState
@@ -50,7 +65,9 @@ class _SamplingRuleApplier:
         self.sampling_rule = sampling_rule
 
         if statistics is None:
-            self.__statistics = _SamplingStatisticsDocument(self.__client_id, self.sampling_rule.RuleName)
+            self.__statistics = _SamplingStatisticsDocument(
+                self.__client_id, self.sampling_rule.RuleName
+            )
         else:
             self.__statistics = statistics
         self.__statistics_lock = Lock()
@@ -58,22 +75,36 @@ class _SamplingRuleApplier:
         self.__borrowing = False
 
         if target is None:
-            self.__fixed_rate_sampler = TraceIdRatioBased(self.sampling_rule.FixedRate)
+            self.__fixed_rate_sampler = TraceIdRatioBased(
+                self.sampling_rule.FixedRate
+            )
             # Until targets are fetched, initialize as borrowing=True if there will be a quota > 0
             if self.sampling_rule.ReservoirSize > 0:
-                self.__reservoir_sampler = self.__create_reservoir_sampler(quota=1)
+                self.__reservoir_sampler = self.__create_reservoir_sampler(
+                    quota=1
+                )
                 self.__borrowing = True
             else:
-                self.__reservoir_sampler = self.__create_reservoir_sampler(quota=0)
+                self.__reservoir_sampler = self.__create_reservoir_sampler(
+                    quota=0
+                )
             # No targets are present, borrow until the end of time if there is any quota
             self.__reservoir_expiry = self._clock.max()
         else:
-            new_quota = target.ReservoirQuota if target.ReservoirQuota is not None else 0
+            new_quota = (
+                target.ReservoirQuota
+                if target.ReservoirQuota is not None
+                else 0
+            )
             new_fixed_rate = target.FixedRate
-            self.__reservoir_sampler = self.__create_reservoir_sampler(quota=new_quota)
+            self.__reservoir_sampler = self.__create_reservoir_sampler(
+                quota=new_quota
+            )
             self.__fixed_rate_sampler = TraceIdRatioBased(new_fixed_rate)
             if target.ReservoirQuotaTTL is not None:
-                self.__reservoir_expiry = self._clock.from_timestamp(target.ReservoirQuotaTTL)
+                self.__reservoir_expiry = self._clock.from_timestamp(
+                    target.ReservoirQuotaTTL
+                )
             else:
                 # assume expired if no TTL
                 self.__reservoir_expiry = self._clock.now()
@@ -90,12 +121,22 @@ class _SamplingRuleApplier:
     ) -> "SamplingResult":
         has_borrowed = False
         has_sampled = False
-        sampling_result = SamplingResult(decision=Decision.DROP, attributes=attributes, trace_state=trace_state)
+        sampling_result = SamplingResult(
+            decision=Decision.DROP,
+            attributes=attributes,
+            trace_state=trace_state,
+        )
 
         reservoir_expired: bool = self._clock.now() >= self.__reservoir_expiry
         if not reservoir_expired:
             sampling_result = self.__reservoir_sampler.should_sample(
-                parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+                parent_context,
+                trace_id,
+                name,
+                kind=kind,
+                attributes=attributes,
+                links=links,
+                trace_state=trace_state,
             )
 
         if sampling_result.decision is not Decision.DROP:
@@ -103,7 +144,13 @@ class _SamplingRuleApplier:
             has_sampled = True
         else:
             sampling_result = self.__fixed_rate_sampler.should_sample(
-                parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+                parent_context,
+                trace_id,
+                name,
+                kind=kind,
+                attributes=attributes,
+                links=links,
+                trace_state=trace_state,
             )
             if sampling_result.decision is not Decision.DROP:
                 has_sampled = True
@@ -118,12 +165,20 @@ class _SamplingRuleApplier:
     def get_then_reset_statistics(self):
         with self.__statistics_lock:
             old_stats = self.__statistics
-            self.__statistics = _SamplingStatisticsDocument(self.__client_id, self.sampling_rule.RuleName)
+            self.__statistics = _SamplingStatisticsDocument(
+                self.__client_id, self.sampling_rule.RuleName
+            )
 
         return old_stats.snapshot(self._clock)
 
     def with_target(self, target: _SamplingTarget) -> "_SamplingRuleApplier":
-        new_applier = _SamplingRuleApplier(self.sampling_rule, self.__client_id, self._clock, self.__statistics, target)
+        new_applier = _SamplingRuleApplier(
+            self.sampling_rule,
+            self.__client_id,
+            self._clock,
+            self.__statistics,
+            target,
+        )
         return new_applier
 
     def matches(self, resource: Resource, attributes: Attributes) -> bool:
@@ -136,18 +191,28 @@ class _SamplingRuleApplier:
         if attributes is not None:
             # If `URL_PATH/URL_FULL/HTTP_REQUEST_METHOD/SERVER_ADDRESS` are not populated
             # also check `HTTP_TARGET/HTTP_URL/HTTP_METHOD/HTTP_HOST` respectively as backup
-            url_path = attributes.get(SpanAttributes.URL_PATH, attributes.get(SpanAttributes.HTTP_TARGET, None))
-            url_full = attributes.get(SpanAttributes.URL_FULL, attributes.get(SpanAttributes.HTTP_URL, None))
+            url_path = attributes.get(
+                SpanAttributes.URL_PATH,
+                attributes.get(SpanAttributes.HTTP_TARGET, None),
+            )
+            url_full = attributes.get(
+                SpanAttributes.URL_FULL,
+                attributes.get(SpanAttributes.HTTP_URL, None),
+            )
             http_request_method = attributes.get(
-                SpanAttributes.HTTP_REQUEST_METHOD, attributes.get(SpanAttributes.HTTP_METHOD, None)
+                SpanAttributes.HTTP_REQUEST_METHOD,
+                attributes.get(SpanAttributes.HTTP_METHOD, None),
             )
             server_address = attributes.get(
-                SpanAttributes.SERVER_ADDRESS, attributes.get(SpanAttributes.HTTP_HOST, None)
+                SpanAttributes.SERVER_ADDRESS,
+                attributes.get(SpanAttributes.HTTP_HOST, None),
             )
 
         # Resource shouldn't be none as it should default to empty resource
         if resource is not None:
-            service_name = resource.attributes.get(ResourceAttributes.SERVICE_NAME, "")
+            service_name = resource.attributes.get(
+                ResourceAttributes.SERVICE_NAME, ""
+            )
 
         # target may be in url
         if url_path is None and isinstance(url_full, str):
@@ -167,11 +232,23 @@ class _SamplingRuleApplier:
         return (
             _Matcher.attribute_match(attributes, self.sampling_rule.Attributes)
             and _Matcher.wild_card_match(url_path, self.sampling_rule.URLPath)
-            and _Matcher.wild_card_match(http_request_method, self.sampling_rule.HTTPMethod)
-            and _Matcher.wild_card_match(server_address, self.sampling_rule.Host)
-            and _Matcher.wild_card_match(service_name, self.sampling_rule.ServiceName)
-            and _Matcher.wild_card_match(self.__get_service_type(resource), self.sampling_rule.ServiceType)
-            and _Matcher.wild_card_match(self.__get_arn(resource, attributes), self.sampling_rule.ResourceARN)
+            and _Matcher.wild_card_match(
+                http_request_method, self.sampling_rule.HTTPMethod
+            )
+            and _Matcher.wild_card_match(
+                server_address, self.sampling_rule.Host
+            )
+            and _Matcher.wild_card_match(
+                service_name, self.sampling_rule.ServiceName
+            )
+            and _Matcher.wild_card_match(
+                self.__get_service_type(resource),
+                self.sampling_rule.ServiceType,
+            )
+            and _Matcher.wild_card_match(
+                self.__get_arn(resource, attributes),
+                self.sampling_rule.ResourceARN,
+            )
         )
 
     def __create_reservoir_sampler(self, quota: int) -> Sampler:
@@ -182,28 +259,38 @@ class _SamplingRuleApplier:
         if resource is None:
             return ""
 
-        cloud_platform = resource.attributes.get(ResourceAttributes.CLOUD_PLATFORM, None)
+        cloud_platform = resource.attributes.get(
+            ResourceAttributes.CLOUD_PLATFORM, None
+        )
         if not isinstance(cloud_platform, str):
             return ""
 
         return cloud_platform_mapping.get(cloud_platform, "")
 
     # pylint: disable=no-self-use
-    def __get_arn(self, resource: Resource, attributes: Attributes) -> AttributeValue:
+    def __get_arn(
+        self, resource: Resource, attributes: Attributes
+    ) -> AttributeValue:
         if resource is not None:
-            arn = resource.attributes.get(ResourceAttributes.AWS_ECS_CONTAINER_ARN, None)
+            arn = resource.attributes.get(
+                ResourceAttributes.AWS_ECS_CONTAINER_ARN, None
+            )
             if arn is not None:
                 return arn
         if (
             resource is not None
-            and resource.attributes.get(ResourceAttributes.CLOUD_PLATFORM) == CloudPlatformValues.AWS_LAMBDA.value
+            and resource.attributes.get(ResourceAttributes.CLOUD_PLATFORM)
+            == CloudPlatformValues.AWS_LAMBDA.value
         ):
             return self.__get_lambda_arn(resource, attributes)
         return ""
 
-    def __get_lambda_arn(self, resource: Resource, attributes: Attributes) -> AttributeValue:
+    def __get_lambda_arn(
+        self, resource: Resource, attributes: Attributes
+    ) -> AttributeValue:
         arn = resource.attributes.get(
-            ResourceAttributes.CLOUD_RESOURCE_ID, resource.attributes.get(ResourceAttributes.FAAS_ID, None)
+            ResourceAttributes.CLOUD_RESOURCE_ID,
+            resource.attributes.get(ResourceAttributes.FAAS_ID, None),
         )
         if arn is not None:
             return arn
@@ -214,7 +301,9 @@ class _SamplingRuleApplier:
         # Note from `SpanAttributes.CLOUD_RESOURCE_ID`:
         # "On some cloud providers, it may not be possible to determine the full ID at startup,
         # so it may be necessary to set cloud.resource_id as a span attribute instead."
-        arn = attributes.get(SpanAttributes.CLOUD_RESOURCE_ID, attributes.get("faas.id", None))
+        arn = attributes.get(
+            SpanAttributes.CLOUD_RESOURCE_ID, attributes.get("faas.id", None)
+        )
         if arn is not None:
             return arn
 

@@ -18,14 +18,19 @@
 
 from logging import getLogger
 from threading import Lock
-from typing import Dict, Optional, Sequence, List
+from typing import Dict, List, Optional, Sequence
 
+from opentelemetry.context import Context
 from opentelemetry.samplers.aws._clock import _Clock
 from opentelemetry.samplers.aws._fallback_sampler import _FallbackSampler
 from opentelemetry.samplers.aws._sampling_rule import _SamplingRule
-from opentelemetry.samplers.aws._sampling_rule_applier import _SamplingRuleApplier
-from opentelemetry.samplers.aws._sampling_target import _SamplingTarget, _SamplingTargetResponse
-from opentelemetry.context import Context
+from opentelemetry.samplers.aws._sampling_rule_applier import (
+    _SamplingRuleApplier,
+)
+from opentelemetry.samplers.aws._sampling_target import (
+    _SamplingTarget,
+    _SamplingTargetResponse,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace.sampling import SamplingResult
 from opentelemetry.trace import Link, SpanKind
@@ -40,7 +45,12 @@ DEFAULT_TARGET_POLLING_INTERVAL_SECONDS = 10
 
 class _RuleCache:
     def __init__(
-        self, resource: Resource, fallback_sampler: _FallbackSampler, client_id: str, clock: _Clock, lock: Lock
+        self,
+        resource: Resource,
+        fallback_sampler: _FallbackSampler,
+        client_id: str,
+        clock: _Clock,
+        lock: Lock,
     ):
         self.__client_id = client_id
         self.__rule_appliers: List[_SamplingRuleApplier] = []
@@ -76,25 +86,43 @@ class _RuleCache:
         _logger.debug("No sampling rules were matched")
         # Should not ever reach fallback sampler as default rule is able to match
         return self._fallback_sampler.should_sample(
-            parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+            parent_context,
+            trace_id,
+            name,
+            kind=kind,
+            attributes=attributes,
+            links=links,
+            trace_state=trace_state,
         )
 
-    def update_sampling_rules(self, new_sampling_rules: List[_SamplingRule]) -> None:
+    def update_sampling_rules(
+        self, new_sampling_rules: List[_SamplingRule]
+    ) -> None:
         new_sampling_rules.sort()
         temp_rule_appliers: List[_SamplingRuleApplier] = []
         for sampling_rule in new_sampling_rules:
             if sampling_rule.RuleName == "":
-                _logger.debug("sampling rule without rule name is not supported")
+                _logger.debug(
+                    "sampling rule without rule name is not supported"
+                )
                 continue
             if sampling_rule.Version != 1:
-                _logger.debug("sampling rule without Version 1 is not supported: RuleName: %s", sampling_rule.RuleName)
+                _logger.debug(
+                    "sampling rule without Version 1 is not supported: RuleName: %s",
+                    sampling_rule.RuleName,
+                )
                 continue
-            temp_rule_appliers.append(_SamplingRuleApplier(sampling_rule, self.__client_id, self._clock))
+            temp_rule_appliers.append(
+                _SamplingRuleApplier(
+                    sampling_rule, self.__client_id, self._clock
+                )
+            )
 
         with self.__cache_lock:
             # map list of rule appliers by each applier's sampling_rule name
             rule_applier_map: Dict[str, _SamplingRuleApplier] = {
-                applier.sampling_rule.RuleName: applier for applier in self.__rule_appliers
+                applier.sampling_rule.RuleName: applier
+                for applier in self.__rule_appliers
             }
 
             # If a sampling rule has not changed, keep its respective applier in the cache.
@@ -108,14 +136,20 @@ class _RuleCache:
             self.__rule_appliers = temp_rule_appliers
             self._last_modified = self._clock.now()
 
-    def update_sampling_targets(self, sampling_targets_response: _SamplingTargetResponse):
-        targets: List[_SamplingTarget] = sampling_targets_response.SamplingTargetDocuments
+    def update_sampling_targets(
+        self, sampling_targets_response: _SamplingTargetResponse
+    ):
+        targets: List[_SamplingTarget] = (
+            sampling_targets_response.SamplingTargetDocuments
+        )
 
         with self.__cache_lock:
             next_polling_interval = DEFAULT_TARGET_POLLING_INTERVAL_SECONDS
             min_polling_interval = None
 
-            target_map: Dict[str, _SamplingTarget] = {target.RuleName: target for target in targets}
+            target_map: Dict[str, _SamplingTarget] = {
+                target.RuleName: target for target in targets
+            }
 
             new_appliers: List[_SamplingRuleApplier] = []
             applier: _SamplingRuleApplier
@@ -125,7 +159,10 @@ class _RuleCache:
                     new_appliers.append(applier.with_target(target))
 
                     if target.Interval is not None:
-                        if min_polling_interval is None or min_polling_interval > target.Interval:
+                        if (
+                            min_polling_interval is None
+                            or min_polling_interval > target.Interval
+                        ):
                             min_polling_interval = target.Interval
                 else:
                     new_appliers.append(applier)
@@ -135,7 +172,9 @@ class _RuleCache:
             if min_polling_interval is not None:
                 next_polling_interval = min_polling_interval
 
-            last_rule_modification = self._clock.from_timestamp(sampling_targets_response.LastRuleModification)
+            last_rule_modification = self._clock.from_timestamp(
+                sampling_targets_response.LastRuleModification
+            )
             refresh_rules = last_rule_modification > self._last_modified
 
             return (refresh_rules, next_polling_interval)
@@ -149,4 +188,8 @@ class _RuleCache:
 
     def expired(self) -> bool:
         with self.__cache_lock:
-            return self._clock.now() > self._last_modified + self._clock.time_delta(seconds=CACHE_TTL_SECONDS)
+            return (
+                self._clock.now()
+                > self._last_modified
+                + self._clock.time_delta(seconds=CACHE_TTL_SECONDS)
+            )

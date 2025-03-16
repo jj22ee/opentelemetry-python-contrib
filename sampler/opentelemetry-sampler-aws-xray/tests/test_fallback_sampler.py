@@ -19,9 +19,8 @@
 import datetime
 from unittest import TestCase
 
-from opentelemetry.samplers.aws._mock_clock import MockClock
-
 from opentelemetry.samplers.aws._fallback_sampler import _FallbackSampler
+from opentelemetry.samplers.aws._mock_clock import MockClock
 from opentelemetry.sdk.trace.sampling import ALWAYS_OFF, Decision
 
 
@@ -41,7 +40,10 @@ class TestRateLimitingSampler(TestCase):
         # 0 seconds passed, 0 quota available
         sampled = 0
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 0)
 
@@ -49,7 +51,10 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(0.4)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 0)
 
@@ -57,7 +62,10 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(0.4)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 0)
 
@@ -65,7 +73,10 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(0.4)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 1)
 
@@ -73,7 +84,10 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(0.4)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 0)
 
@@ -81,7 +95,10 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(0.4)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 0)
 
@@ -89,7 +106,10 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(0.4)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 1)
 
@@ -97,6 +117,9 @@ class TestRateLimitingSampler(TestCase):
         sampled = 0
         clock.add_time(100)
         for _ in range(0, 30):
-            if sampler.should_sample(None, 1234, "name").decision != Decision.DROP:
+            if (
+                sampler.should_sample(None, 1234, "name").decision
+                != Decision.DROP
+            ):
                 sampled += 1
         self.assertEqual(sampled, 1)

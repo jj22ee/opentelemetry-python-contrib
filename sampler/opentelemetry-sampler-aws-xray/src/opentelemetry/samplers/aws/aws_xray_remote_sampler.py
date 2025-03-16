@@ -23,13 +23,23 @@ from typing import Optional, Sequence
 
 from typing_extensions import override
 
-from opentelemetry.samplers.aws._aws_xray_sampling_client import _AwsXRaySamplingClient, DEFAULT_SAMPLING_PROXY_ENDPOINT
+from opentelemetry.context import Context
+from opentelemetry.samplers.aws._aws_xray_sampling_client import (
+    DEFAULT_SAMPLING_PROXY_ENDPOINT,
+    _AwsXRaySamplingClient,
+)
 from opentelemetry.samplers.aws._clock import _Clock
 from opentelemetry.samplers.aws._fallback_sampler import _FallbackSampler
-from opentelemetry.samplers.aws._rule_cache import DEFAULT_TARGET_POLLING_INTERVAL_SECONDS, _RuleCache
-from opentelemetry.context import Context
+from opentelemetry.samplers.aws._rule_cache import (
+    DEFAULT_TARGET_POLLING_INTERVAL_SECONDS,
+    _RuleCache,
+)
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace.sampling import ParentBased, Sampler, SamplingResult
+from opentelemetry.sdk.trace.sampling import (
+    ParentBased,
+    Sampler,
+    SamplingResult,
+)
 from opentelemetry.trace import Link, SpanKind
 from opentelemetry.trace.span import TraceState
 from opentelemetry.util.types import Attributes
@@ -51,7 +61,10 @@ class AwsXRayRemoteSampler(Sampler):
     ):
         self._root = ParentBased(
             _AwsXRayRemoteSampler(
-                resource=resource, endpoint=endpoint, polling_interval=polling_interval, log_level=log_level
+                resource=resource,
+                endpoint=endpoint,
+                polling_interval=polling_interval,
+                log_level=log_level,
             )
         )
 
@@ -68,7 +81,13 @@ class AwsXRayRemoteSampler(Sampler):
         trace_state: Optional["TraceState"] = None,
     ) -> "SamplingResult":
         return self._root.should_sample(
-            parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+            parent_context,
+            trace_id,
+            name,
+            kind=kind,
+            attributes=attributes,
+            links=links,
+            trace_state=trace_state,
         )
 
     # pylint: disable=no-self-use
@@ -103,33 +122,47 @@ class _AwsXRayRemoteSampler(Sampler):
             _logger.setLevel(log_level)
 
         if endpoint is None:
-            _logger.info("`endpoint` is `None`. Defaulting to %s", DEFAULT_SAMPLING_PROXY_ENDPOINT)
+            _logger.info(
+                "`endpoint` is `None`. Defaulting to %s",
+                DEFAULT_SAMPLING_PROXY_ENDPOINT,
+            )
             endpoint = DEFAULT_SAMPLING_PROXY_ENDPOINT
         if polling_interval is None or polling_interval < 10:
             _logger.info(
-                "`polling_interval` is `None` or too small. Defaulting to %s", DEFAULT_RULES_POLLING_INTERVAL_SECONDS
+                "`polling_interval` is `None` or too small. Defaulting to %s",
+                DEFAULT_RULES_POLLING_INTERVAL_SECONDS,
             )
             polling_interval = DEFAULT_RULES_POLLING_INTERVAL_SECONDS
 
         self.__client_id = self.__generate_client_id()
         self._clock = _Clock()
-        self.__xray_client = _AwsXRaySamplingClient(endpoint, log_level=log_level)
+        self.__xray_client = _AwsXRaySamplingClient(
+            endpoint, log_level=log_level
+        )
         self.__fallback_sampler = _FallbackSampler(self._clock)
 
         self.__polling_interval = polling_interval
-        self.__target_polling_interval = DEFAULT_TARGET_POLLING_INTERVAL_SECONDS
+        self.__target_polling_interval = (
+            DEFAULT_TARGET_POLLING_INTERVAL_SECONDS
+        )
         self.__rule_polling_jitter = random.uniform(0.0, 5.0)
         self.__target_polling_jitter = random.uniform(0.0, 0.1)
 
         if resource is not None:
             self.__resource = resource
         else:
-            _logger.warning("OTel Resource provided is `None`. Defaulting to empty resource")
+            _logger.warning(
+                "OTel Resource provided is `None`. Defaulting to empty resource"
+            )
             self.__resource = Resource.get_empty()
 
         self.__rule_cache_lock = Lock()
         self.__rule_cache = _RuleCache(
-            self.__resource, self.__fallback_sampler, self.__client_id, self._clock, self.__rule_cache_lock
+            self.__resource,
+            self.__fallback_sampler,
+            self.__client_id,
+            self._clock,
+            self.__rule_cache_lock,
         )
 
         # Schedule the next rule poll now
@@ -140,7 +173,8 @@ class _AwsXRayRemoteSampler(Sampler):
 
         # set up the target poller to go off once after the default interval. Subsequent polls may use new intervals.
         self._targets_timer = Timer(
-            self.__target_polling_interval + self.__target_polling_jitter, self.__start_sampling_target_poller
+            self.__target_polling_interval + self.__target_polling_jitter,
+            self.__start_sampling_target_poller,
         )
         self._targets_timer.daemon = True  # Ensures that when the main thread exits, the Timer threads are killed
         self._targets_timer.start()
@@ -158,13 +192,27 @@ class _AwsXRayRemoteSampler(Sampler):
         trace_state: Optional["TraceState"] = None,
     ) -> "SamplingResult":
         if self.__rule_cache.expired():
-            _logger.debug("Rule cache is expired so using fallback sampling strategy")
+            _logger.debug(
+                "Rule cache is expired so using fallback sampling strategy"
+            )
             return self.__fallback_sampler.should_sample(
-                parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+                parent_context,
+                trace_id,
+                name,
+                kind=kind,
+                attributes=attributes,
+                links=links,
+                trace_state=trace_state,
             )
 
         return self.__rule_cache.should_sample(
-            parent_context, trace_id, name, kind=kind, attributes=attributes, links=links, trace_state=trace_state
+            parent_context,
+            trace_id,
+            name,
+            kind=kind,
+            attributes=attributes,
+            links=links,
+            trace_state=trace_state,
         )
 
     # pylint: disable=no-self-use
@@ -181,31 +229,56 @@ class _AwsXRayRemoteSampler(Sampler):
         self.__get_and_update_sampling_rules()
         # Schedule the next sampling rule poll
         self._rules_timer = Timer(
-            self.__polling_interval + self.__rule_polling_jitter, self.__start_sampling_rule_poller
+            self.__polling_interval + self.__rule_polling_jitter,
+            self.__start_sampling_rule_poller,
         )
         self._rules_timer.daemon = True
         self._rules_timer.start()
 
     def __get_and_update_sampling_targets(self) -> None:
         all_statistics = self.__rule_cache.get_all_statistics()
-        sampling_targets_response = self.__xray_client.get_sampling_targets(all_statistics)
-        refresh_rules, min_polling_interval = self.__rule_cache.update_sampling_targets(sampling_targets_response)
+        sampling_targets_response = self.__xray_client.get_sampling_targets(
+            all_statistics
+        )
+        refresh_rules, min_polling_interval = (
+            self.__rule_cache.update_sampling_targets(
+                sampling_targets_response
+            )
+        )
         if refresh_rules:
             self.__get_and_update_sampling_rules()
-        if min_polling_interval is not None: # type: ignore
+        if min_polling_interval is not None:  # type: ignore
             self.__target_polling_interval = min_polling_interval
 
     def __start_sampling_target_poller(self) -> None:
         self.__get_and_update_sampling_targets()
         # Schedule the next sampling targets poll
         self._targets_timer = Timer(
-            self.__target_polling_interval + self.__target_polling_jitter, self.__start_sampling_target_poller
+            self.__target_polling_interval + self.__target_polling_jitter,
+            self.__start_sampling_target_poller,
         )
         self._targets_timer.daemon = True
         self._targets_timer.start()
 
     def __generate_client_id(self) -> str:
-        hex_chars = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
+        hex_chars = [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+        ]
         client_id_array: list[str] = []
         for _ in range(0, 24):
             client_id_array.append(random.choice(hex_chars))

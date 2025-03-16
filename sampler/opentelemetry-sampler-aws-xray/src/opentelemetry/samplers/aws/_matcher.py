@@ -17,7 +17,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import re
-
 from typing import Optional
 
 from opentelemetry.semconv.resource import CloudPlatformValues
@@ -34,7 +33,9 @@ cloud_platform_mapping = {
 
 class _Matcher:
     @staticmethod
-    def wild_card_match(text: Optional[AttributeValue] = None, pattern: Optional[str] = None) -> bool:
+    def wild_card_match(
+        text: Optional[AttributeValue] = None, pattern: Optional[str] = None
+    ) -> bool:
         if pattern == "*":
             return True
         if not isinstance(text, str) or pattern is None:
@@ -43,7 +44,10 @@ class _Matcher:
             return len(text) == 0
         for char in pattern:
             if char in ("*", "?"):
-                return re.fullmatch(_Matcher.to_regex_pattern(pattern), text) is not None
+                return (
+                    re.fullmatch(_Matcher.to_regex_pattern(pattern), text)
+                    is not None
+                )
         return pattern == text
 
     @staticmethod
@@ -68,10 +72,17 @@ class _Matcher:
         return regex_pattern
 
     @staticmethod
-    def attribute_match(attributes: Optional[Attributes] = None, rule_attributes: Optional["dict[str, str]"] = None) -> bool:
+    def attribute_match(
+        attributes: Optional[Attributes] = None,
+        rule_attributes: Optional["dict[str, str]"] = None,
+    ) -> bool:
         if rule_attributes is None or len(rule_attributes) == 0:
             return True
-        if attributes is None or len(attributes) == 0 or len(rule_attributes) > len(attributes):
+        if (
+            attributes is None
+            or len(attributes) == 0
+            or len(rule_attributes) > len(attributes)
+        ):
             return False
 
         matched_count = 0

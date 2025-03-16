@@ -20,7 +20,6 @@ import datetime
 from unittest import TestCase
 
 from opentelemetry.samplers.aws._mock_clock import MockClock
-
 from opentelemetry.samplers.aws._rate_limiter import _RateLimiter
 
 
